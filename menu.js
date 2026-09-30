@@ -26,6 +26,13 @@ async function load() {
 }
 
 function draw() {
+  const barLeft = $('.chips')?.scrollLeft || 0; // the category bar keeps its place when the page redraws
+  drawPage();
+  const bar = $('.chips');
+  if (bar) bar.scrollLeft = barLeft;
+}
+
+function drawPage() {
   const m = data.menu || {};
   const cats = (m.categories || []).filter((c) => (m.items || []).some((i) => i.category_id === c.id));
   if (!cats.length) {

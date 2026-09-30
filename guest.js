@@ -414,6 +414,7 @@ function statusHtml() {
 // ---------------------------------------------------------------- Page
 function draw() {
   const main = $('#main');
+  const barLeft = $('.chips')?.scrollLeft || 0; // the category bar keeps its place when the page redraws
   const insta = info.shop.instagram;
   main.innerHTML = `${insta ? `<a class="follow" href="https://www.instagram.com/${esc(insta)}/" target="_blank" rel="noopener">📸 Follow us <b>@${esc(insta)}</b> for workshops, brunch &amp; news</a>` : ''}
     ${info.online === false ? '<div class="card" style="border-color:var(--danger)">⚠️ The café system is not connected right now, so your requests may not arrive. Please call a waiter by hand.</div>' : ''}
@@ -424,6 +425,8 @@ function draw() {
   else if (tab === 'waiter') drawWaiter(el);
   else if (tab === 'bill') drawBill(el);
   else drawReview(el);
+  const bar = $('.chips');
+  if (bar) bar.scrollLeft = barLeft;
   $$('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
   const n = cartCount();
   $('#cartbar').hidden = !(n && tab === 'menu');
