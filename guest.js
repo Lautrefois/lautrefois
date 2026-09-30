@@ -162,7 +162,7 @@ function drawMenu(el) {
     <p class="small mute center" style="margin-top:18px">Your order goes to a waiter, who comes to confirm it with you before it goes to the kitchen.</p>`;
   el.onclick = (e) => {
     const c = e.target.closest('[data-cat]');
-    if (c) { cat = Number(c.dataset.cat); draw(); scrollTo({ top: 0 }); return; }
+    if (c) { cat = Number(c.dataset.cat); keepPlace(draw); return; }
     const plus = e.target.closest('[data-plus]');
     if (plus) {
       const item = items().find((i) => i.id === Number(plus.dataset.plus));
@@ -174,6 +174,24 @@ function drawMenu(el) {
     const minus = e.target.closest('[data-minus]');
     if (minus) { removeOne(Number(minus.dataset.minus)); draw(); }
   };
+}
+
+// Switching category: the category bar keeps its place (no jump back to the first category), and
+// if the page was scrolled down, the new category starts right under the bar (no jump to the top).
+function keepPlace(redraw) {
+  const bar = document.querySelector('.chips');
+  const left = bar ? bar.scrollLeft : 0;
+  const pinned = bar && bar.getBoundingClientRect().top <= 1;
+  redraw();
+  const nb = document.querySelector('.chips');
+  if (!nb) return;
+  nb.scrollLeft = left;
+  const on = nb.querySelector('.chip.on');
+  if (on && (on.offsetLeft < nb.scrollLeft || on.offsetLeft + on.offsetWidth > nb.scrollLeft + nb.clientWidth)) {
+    nb.scrollLeft = on.offsetLeft - 16;
+  }
+  const h = nb.nextElementSibling;
+  if (pinned && h) scrollTo({ top: h.getBoundingClientRect().top + scrollY - nb.offsetHeight - 8 });
 }
 
 // Items with a choice (e.g. croissant: chocolate / thyme / halloumi) or add-ons (milk, syrup…).

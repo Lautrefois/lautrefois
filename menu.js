@@ -55,9 +55,26 @@ $('#main').addEventListener('click', (e) => {
   const c = e.target.closest('[data-cat]');
   if (!c) return;
   cat = Number(c.dataset.cat);
-  draw();
-  scrollTo({ top: 0 });
+  keepPlace(draw);
 });
+
+// Switching category: the category bar keeps its place (no jump back to the first category), and
+// if the page was scrolled down, the new category starts right under the bar (no jump to the top).
+function keepPlace(redraw) {
+  const bar = document.querySelector('.chips');
+  const left = bar ? bar.scrollLeft : 0;
+  const pinned = bar && bar.getBoundingClientRect().top <= 1;
+  redraw();
+  const nb = document.querySelector('.chips');
+  if (!nb) return;
+  nb.scrollLeft = left;
+  const on = nb.querySelector('.chip.on');
+  if (on && (on.offsetLeft < nb.scrollLeft || on.offsetLeft + on.offsetWidth > nb.scrollLeft + nb.clientWidth)) {
+    nb.scrollLeft = on.offsetLeft - 16;
+  }
+  const h = nb.nextElementSibling;
+  if (pinned && h) scrollTo({ top: h.getBoundingClientRect().top + scrollY - nb.offsetHeight - 8 });
+}
 
 async function refresh(first = false) {
   try {
