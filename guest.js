@@ -10,7 +10,6 @@ let tab = 'menu';
 let cat = null;
 let cart = [];        // [{key,item_id,name,choice,addons:[{id,name,price,choice}],price,qty}]
 let orderNote = '';
-let reason = null;
 let pay = null;
 const rate = { food: 0, service: 0, ambience: 0 };
 let reviewSent = false;
@@ -119,7 +118,7 @@ $('#overlay').addEventListener('click', (e) => { if (e.target.id === 'overlay' |
 
 // ---------------------------------------------------------------- Menu & cart
 const items = () => info.menu?.items || [];
-const addonsFor = (item) => (info.menu?.addons || []).filter((a) => a.category_ids.includes(item.category_id) || a.item_ids.includes(item.id));
+const addonsFor = (item) => (info.menu?.addons || []).filter((a) => (item.cat_addons !== 0 && a.category_ids.includes(item.category_id)) || a.item_ids.includes(item.id));
 const cartCount = () => cart.reduce((n, l) => n + l.qty, 0);
 const cartTotal = () => cart.reduce((n, l) => n + l.price * l.qty, 0);
 const qtyOf = (itemId) => cart.filter((l) => l.item_id === itemId).reduce((n, l) => n + l.qty, 0);
@@ -195,13 +194,13 @@ function keepPlace(redraw) {
 }
 
 // Items with a choice (e.g. croissant: chocolate / thyme / halloumi) or add-ons (milk, syrup…).
-function optionsSheet(item) {
+function optionsSheet(item, after) {
   const addons = addonsFor(item);
   let choice = item.choices.length === 1 ? item.choices[0] : '';
   const picked = new Map(); // addon id -> choice
   const s = openSheet(`<h3>${esc(item.name)}</h3><div class="mute">${money(item.price)}</div>
     ${item.choices.length ? `<div class="lbl">Choose one</div>${item.choices.map((c) => `<label class="optline ${c === choice ? 'on' : ''}"><input type="radio" name="ch" value="${esc(c)}" ${c === choice ? 'checked' : ''}><span class="grow">${esc(c)}</span></label>`).join('')}` : ''}
-    ${addons.length ? `<div class="lbl">Extras (optional)</div>${addons.map((a) => `<label class="optline" data-a="${a.id}"><input type="checkbox" value="${a.id}"><span class="grow">${esc(a.name)}</span><span class="price">+${money(a.price)}</span></label>
+    ${addons.length ? `<div class="lbl">Extras (optional)</div>${addons.map((a) => `<label class="optline" data-a="${a.id}"><input type="checkbox" value="${a.id}"><span class="grow">${esc(a.name)}</span><span class="price">${a.price ? `+${money(a.price)}` : 'Free'}</span></label>
       ${a.choices.length ? `<select data-ac="${a.id}" hidden>${a.choices.map((c) => `<option>${esc(c)}</option>`).join('')}</select>` : ''}`).join('')}` : ''}
     <button class="btn" data-add>Add to my order · <span id="op">${money(item.price)}</span></button>`);
   const price = () => item.price + [...picked.keys()].reduce((n, id) => n + addons.find((a) => a.id === id).price, 0);
@@ -222,7 +221,6 @@ function optionsSheet(item) {
     $('#op', s).textContent = money(price());
   };
   $('[data-add]', s).onclick = () => {
-    if (item.choices.length && !choice) return toast(`Please choose which ${item.name}`, true);
     addLine(item, choice, [...picked].map(([id, c]) => {
       const a = addons.find((x) => x.id === id);
       return { id, name: a.name, price: a.price, ...(c ? { choice: c } : {}) };
@@ -230,7 +228,45 @@ function optionsSheet(item) {
     closeSheet();
     draw();
     toast(`${item.name} added ✓`);
+    if (after) after();
   };
+}
+
+// "Goes well with your order": up to 3 items picked from the lists set in the POS (per item, then
+// per category). Never an item already in the cart, a sold-out one, or one from a section the
+// guest has already ordered from.
+function suggestions() {
+  const all = items();
+  const inCart = new Set(cart.map((l) => l.item_id));
+  // Coffee, tea and other drinks count as one section: a guest who has a drink isn't offered another.
+  const DRINKS = ['coffee', 'tea & more', 'beverages'];
+  const sectionOf = (catId) => {
+    const name = String(info.menu.categories.find((c) => c.id === catId)?.name || '').trim().toLowerCase();
+    return DRINKS.includes(name) ? 'drinks' : catId;
+  };
+  const sections = new Set(cart.map((l) => sectionOf(all.find((i) => i.id === l.item_id)?.category_id)));
+  const score = new Map(); // item id -> [times suggested, first position]
+  let pos = 0;
+  const offer = (id) => {
+    const it = all.find((i) => i.id === id);
+    if (!it || it.sold_out || inCart.has(id) || sections.has(sectionOf(it.category_id))) return;
+    const s = score.get(id) || [0, pos++];
+    s[0]++;
+    score.set(id, s);
+  };
+  for (const l of cart) {
+    const it = all.find((i) => i.id === l.item_id);
+    if (!it) continue;
+    (it.suggest_ids || []).forEach(offer);
+    (info.menu.categories.find((c) => c.id === it.category_id)?.suggest_ids || []).forEach(offer);
+  }
+  return [...score].sort((a, b) => b[1][0] - a[1][0] || a[1][1] - b[1][1]).slice(0, 3).map(([id]) => all.find((i) => i.id === id));
+}
+
+function suggestionsHtml() {
+  const list = suggestions();
+  if (!list.length) return '';
+  return `<div class="sug"><p class="t">Goes well with your order</p><div class="r">${list.map((it) => `<button data-sug="${it.id}"><b>${esc(it.name)}</b><span>+${money(it.price)}</span><i>+</i></button>`).join('')}</div></div>`;
 }
 
 function cartSheet() {
@@ -241,6 +277,7 @@ function cartSheet() {
           <div><div>${esc(lineName(l))}</div>${l.addons.length ? `<div class="small mute">+ ${esc(addonText(l))}</div>` : ''}<div class="small price">${money(l.price * l.qty)}</div></div>
           <div class="qty"><button class="qb" data-dec="${i}">−</button><b>${l.qty}</b><button class="qb add" data-inc="${i}">+</button></div></div>`).join('')}
         <div class="row total serif"><span>Total</span><span>${money(cartTotal())}</span></div></div>
+      ${suggestionsHtml()}
       <label class="lbl" for="onote">Anything we should know? (allergies, no sugar…)</label>
       <textarea id="onote" rows="2" maxlength="300">${esc(orderNote)}</textarea>
       <button class="btn" data-send>Send my order to the waiter</button>
@@ -251,6 +288,14 @@ function cartSheet() {
       const dec = e.target.closest('[data-dec]');
       if (inc) { cart[inc.dataset.inc].qty++; saveCart(); return render(); }
       if (dec) { const l = cart[dec.dataset.dec]; l.qty--; if (!l.qty) cart.splice(cart.indexOf(l), 1); saveCart(); return render(); }
+      const sug = e.target.closest('[data-sug]');
+      if (sug) {
+        const item = items().find((i) => i.id === Number(sug.dataset.sug));
+        if (!item) return;
+        if (item.choices.length || addonsFor(item).length) return optionsSheet(item, cartSheet);
+        addLine(item);
+        return render();
+      }
       const send = e.target.closest('[data-send]');
       if (!send) return;
       send.disabled = true;
@@ -276,44 +321,38 @@ const ICONS = [[/water/i, '💧'], [/cutlery|napkin|fork|spoon/i, '🍴'], [/hel
 const iconFor = (r) => (ICONS.find(([re]) => re.test(r)) || [0, '✨'])[1];
 
 function drawWaiter(el) {
-  el.innerHTML = `<h2>Call a waiter</h2>
-    <p class="mute" style="margin-top:0">Tap what you need and we’ll come to your table.</p>
-    <div class="grid">${info.reasons.map((r) => `<button class="opt ${r === reason ? 'on' : ''}" data-r="${esc(r)}"><span>${iconFor(r)}</span>${esc(r)}</button>`).join('')}</div>
-    <textarea id="wnote" rows="2" maxlength="300" placeholder="Anything else? (optional)"></textarea>
-    <button class="btn" data-call>🔔 Call a waiter</button>
-    <div class="card" style="margin-top:22px">
-      <b>Something not right?</b>
-      <p class="small mute" style="margin:4px 0 0">Tell us here. It goes straight to the manager, and we’ll do our best to fix it.</p>
-      <textarea id="cnote" rows="3" maxlength="1000" placeholder="What went wrong?"></textarea>
-      <button class="btn alt" data-complain>Send to the manager</button>
-    </div>`;
+  el.innerHTML = `<h2 class="waiter-title">Call a waiter <small>Tap what you need</small></h2>
+    <div class="grid waiter-grid">${info.reasons.map((r) => `<button class="opt" data-r="${esc(r)}"><span>${iconFor(r)}</span>${esc(r)}</button>`).join('')}</div>
+    <button class="linkbtn" data-complain-open>Something not right? Tell the manager</button>`;
+  // One tap sends: tapping "Water" calls the waiter for water straight away.
+  const callWaiter = async (why) => {
+    if (el.dataset.sending) return;
+    el.dataset.sending = '1';
+    $$('[data-r], [data-call]', el).forEach((o) => { o.disabled = true; });
+    try {
+      const res = await api('POST', '/request', { type: 'waiter', reason: why || 'Call waiter', note: '' });
+      Object.assign(info, { bill: res.bill, requests: res.requests });
+      toast(res.again ? 'Already on its way ✓' : 'A waiter is on the way ✓');
+      draw();
+      watchSoon();
+    } catch (err) {
+      toast(err.message, true);
+      $$('[data-r], [data-call]', el).forEach((o) => { o.disabled = false; });
+    } finally { delete el.dataset.sending; }
+  };
   el.onclick = async (e) => {
     const r = e.target.closest('[data-r]');
-    if (r) { reason = reason === r.dataset.r ? null : r.dataset.r; $$('[data-r]', el).forEach((o) => o.classList.toggle('on', o.dataset.r === reason)); return; }
-    if (e.target.closest('[data-call]')) {
-      const b = e.target.closest('[data-call]');
-      b.disabled = true;
-      try {
-        const res = await api('POST', '/request', { type: 'waiter', reason: reason || 'Call waiter', note: $('#wnote', el).value });
-        Object.assign(info, { bill: res.bill, requests: res.requests });
-        reason = null;
-        toast(res.again ? 'Already on its way ✓' : 'A waiter is on the way ✓');
-        draw();
-        watchSoon();
-      } catch (err) { toast(err.message, true); } finally { b.disabled = false; }
-    }
-    if (e.target.closest('[data-complain]')) {
-      const b = e.target.closest('[data-complain]');
-      const note = $('#cnote', el).value.trim();
-      if (!note) return toast('Please tell us what went wrong', true);
-      b.disabled = true;
-      try {
-        const res = await api('POST', '/request', { type: 'complaint', note });
-        Object.assign(info, { bill: res.bill, requests: res.requests });
-        toast('Thank you. The manager has your message ✓');
-        draw();
-        watchSoon();
-      } catch (err) { toast(err.message, true); } finally { b.disabled = false; }
+    if (r) return callWaiter(r.dataset.r);
+    if (e.target.closest('[data-call]')) return callWaiter('');
+    if (e.target.closest('[data-complain-open]')) {
+      const sh = openSheet(`<h3>Something not right?</h3><p class="small mute">It goes straight to the manager.</p>
+        <textarea id="cnote" rows="4" maxlength="1000" placeholder="What went wrong?"></textarea><button class="btn" data-complain>Send to the manager</button>`);
+      sh.onclick = async (ev) => {
+        if (!ev.target.closest('[data-complain]')) return;
+        const note = $('#cnote', sh).value.trim();
+        if (!note) return toast('Please tell us what went wrong', true);
+        try { await api('POST', '/request', { type: 'complaint', note }); closeSheet(); toast('Thank you. The manager has your message ✓'); } catch (err) { toast(err.message, true); }
+      };
     }
   };
 }

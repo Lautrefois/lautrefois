@@ -102,3 +102,27 @@ nav button.on { color: var(--accent); font-weight: 600; }
 .toast { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--on-accent); padding: 10px 18px; border-radius: 20px; z-index: 60; display: none; max-width: 90%; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
 .toast.bad { background: var(--danger); }
 .foot { text-align: center; color: var(--mute); font-size: 13px; margin: 26px 0 8px; }
+
+/* Compact waiter tab: fits one phone screen, keeps logo, Instagram and footer */
+header { padding: 14px 16px 2px; }
+header h1 { font-size: 32px; }
+header small { font-size: 10px; letter-spacing: 2.5px; }
+.tablechip { margin-top: 6px; padding: 3px 14px; font-size: 14px; }
+main { padding-top: 4px; }
+.follow { padding: 8px; font-size: 13px; margin: 4px 0; }
+.waiter-grid { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.waiter-grid .opt { padding: 8px 4px; font-size: 13px; line-height: 1.2; min-height: 84px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.waiter-grid .opt span { font-size: 26px; margin-bottom: 3px; }
+.linkbtn { display: block; margin: 10px auto 0; background: none; border: 0; color: var(--mute); text-decoration: underline; font-size: 14px; }
+.waiter-title { margin: 8px 0 8px !important; font-size: 20px; }
+.waiter-title small { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 14px; color: var(--mute); margin-left: 6px; }
+.foot { margin: 14px 0 4px; font-size: 12px; }
+
+/* "Goes well with your order" (cart) */
+.sug { margin-top: 12px; }
+.sug .t { font-size: 13px; color: var(--mute); margin: 0 0 6px; }
+.sug .r { display: flex; gap: 8px; }
+.sug button { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; font-size: 13px; line-height: 1.25; color: var(--ink); }
+.sug button b { display: block; font-weight: 500; }
+.sug button span { color: var(--accent); font-family: Georgia, serif; }
+.sug button i { display: block; font-style: normal; color: var(--accent); font-size: 20px; line-height: 1; margin-top: 3px; }

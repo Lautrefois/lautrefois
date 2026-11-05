@@ -53,7 +53,7 @@ function drawPage() {
     </div>`).join('')}
     ${extras.length ? `<div class="card"><b>Extras</b>${extras.map((a) => {
       const only = a.category_ids.includes(cat) ? '' : ` <span class="small mute">(${esc(items.filter((i) => a.item_ids.includes(i.id)).map((i) => i.name).join(', '))})</span>`;
-      return `<div class="row"><span>${esc(a.name)}${only}${a.choices.length ? `<div class="small mute">${esc(a.choices.join(' · '))}</div>` : ''}</span><span class="price">+${money(a.price)}</span></div>`;
+      return `<div class="row"><span>${esc(a.name)}${only}${a.choices.length ? `<div class="small mute">${esc(a.choices.join(' · '))}</div>` : ''}</span><span class="price">${a.price ? `+${money(a.price)}` : 'Free'}</span></div>`;
     }).join('')}</div>` : ''}
     <div class="foot">${esc(data.shop?.name || '')}${data.shop?.address ? ` · ${esc(data.shop.address)}` : ''}${data.shop?.phone ? ` · ${esc(data.shop.phone)}` : ''}</div>`;
 }
