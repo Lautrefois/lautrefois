@@ -232,35 +232,64 @@ function optionsSheet(item, after) {
   };
 }
 
-// "Goes well with your order": up to 3 items picked from the lists set in the POS (per item, then
-// per category). Never an item already in the cart, a sold-out one, or one from a section the
-// guest has already ordered from.
+// "Goes well with your order": up to 3 items, each a different KIND (a drink, a pastry, a dessert...),
+// picked from the pools set in the POS (per item, then per section), a different one each visit.
+//   - never an item already in the cart, a sold-out one, or a kind the guest already has
+//     (water is the exception: it goes with anything, even a coffee)
+//   - kinds are the menu sections, except that Sweet cups + Parfaits count as one "dessert" kind
+//   - a guest with no drink in the cart is always offered one
+const SEED = Math.floor(Math.random() * 2 ** 31); // new picks on every visit, steady while the order is edited
+const mix = (n) => { let h = (n ^ SEED) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b); h = Math.imul(h ^ (h >>> 16), 0x45d9f3b); return ((h ^ (h >>> 16)) >>> 0) / 2 ** 32; };
+const DRINK_KINDS = new Set(['coffee', 'tea', 'cold']);
+const isWater = (it) => /^(sparkling )?water$/i.test(it.name.trim());
+
 function suggestions() {
   const all = items();
-  const inCart = new Set(cart.map((l) => l.item_id));
-  // Coffee, tea and other drinks count as one section: a guest who has a drink isn't offered another.
-  const DRINKS = ['coffee', 'tea & more', 'beverages'];
-  const sectionOf = (catId) => {
-    const name = String(info.menu.categories.find((c) => c.id === catId)?.name || '').trim().toLowerCase();
-    return DRINKS.includes(name) ? 'drinks' : catId;
+  const cats = info.menu.categories;
+  const kindOf = (catId) => {
+    const name = String(cats.find((c) => c.id === catId)?.name || '').trim().toLowerCase();
+    return { 'coffee': 'coffee', 'tea & more': 'tea', 'beverages': 'cold', 'sweet cups': 'dessert', 'parfaits': 'dessert' }[name] || `cat${catId}`;
   };
-  const sections = new Set(cart.map((l) => sectionOf(all.find((i) => i.id === l.item_id)?.category_id)));
-  const score = new Map(); // item id -> [times suggested, first position]
-  let pos = 0;
+  const inCart = new Set(cart.map((l) => l.item_id));
+  const have = new Set(cart.map((l) => kindOf(all.find((i) => i.id === l.item_id)?.category_id)));
+  const hasDrink = [...have].some((k) => DRINK_KINDS.has(k));
+  const kinds = new Map(); // kind -> { score, ids: Set }
   const offer = (id) => {
     const it = all.find((i) => i.id === id);
-    if (!it || it.sold_out || inCart.has(id) || sections.has(sectionOf(it.category_id))) return;
-    const s = score.get(id) || [0, pos++];
-    s[0]++;
-    score.set(id, s);
+    if (!it || it.sold_out || inCart.has(id)) return;
+    const k = kindOf(it.category_id);
+    if (have.has(k) && !isWater(it)) return;
+    if (!kinds.has(k)) kinds.set(k, { score: 0, ids: new Set() });
+    kinds.get(k).ids.add(id);
   };
   for (const l of cart) {
     const it = all.find((i) => i.id === l.item_id);
     if (!it) continue;
-    (it.suggest_ids || []).forEach(offer);
-    (info.menu.categories.find((c) => c.id === it.category_id)?.suggest_ids || []).forEach(offer);
+    const lists = [it.suggest_ids || [], cats.find((c) => c.id === it.category_id)?.suggest_ids || []];
+    const seen = new Set();
+    for (const list of lists) {
+      list.forEach(offer);
+      for (const id of list) { const x = all.find((i) => i.id === id); if (x) seen.add(kindOf(x.category_id)); }
+    }
+    for (const k of seen) if (kinds.has(k)) kinds.get(k).score++; // a kind several cart items point to ranks higher
   }
-  return [...score].sort((a, b) => b[1][0] - a[1][0] || a[1][1] - b[1][1]).slice(0, 3).map(([id]) => all.find((i) => i.id === id));
+  const hash = (str) => [...str].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) | 0, 7);
+  const ranked = [...kinds].sort((a, b) => b[1].score - a[1].score || mix(hash(a[0])) - mix(hash(b[0])));
+  let chosen = ranked.slice(0, 3);
+  if (!hasDrink && !chosen.some(([k]) => DRINK_KINDS.has(k))) {
+    const drink = ranked.find(([k]) => DRINK_KINDS.has(k));
+    if (drink) chosen = [...chosen.slice(0, 2), drink];
+  }
+  const pick = ([, v]) => [...v.ids].sort((a, b) => mix(a) - mix(b)).map((id) => all.find((i) => i.id === id));
+  const out = chosen.map((c) => pick(c)[0]);
+  // Fewer than 3 kinds available: fill up with more items from the same pools.
+  for (let round = 1; out.length < 3 && round < 3; round++) {
+    for (const c of chosen) {
+      const x = pick(c)[round];
+      if (x && out.length < 3 && !(isWater(x) && out.some(isWater))) out.push(x); // never Water and Sparkling Water together
+    }
+  }
+  return out;
 }
 
 function suggestionsHtml() {
